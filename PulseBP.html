@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#090d16" />
+  <title>Android Flashlight Pulse Reader</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+    body {
+      background: #090d16;
+      color: #f3f4f6;
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px 16px 36px;
+      gap: 16px;
+    }
+    h1 { font-size: 1.35rem; text-align: center; }
+    .card {
+      width: 100%;
+      max-width: 420px;
+      background: #131926;
+      border: 1px solid #232d42;
+      border-radius: 18px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+    }
+    .pulse-ring {
+      position: relative;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      border: 5px solid #ef4444;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+      box-shadow: 0 0 28px rgba(239, 68, 68, 0.3);
+    }
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.75;
+    }
+    .bpm-overlay {
+      position: absolute;
+      text-align: center;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95);
+    }
+    .bpm-number {
+      font-size: 2.6rem;
+      font-weight: 800;
+      color: #ffffff;
+      line-height: 1;
+    }
+    .bpm-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #fca5a5;
+      margin-top: 4px;
+      letter-spacing: 1px;
+    }
+    canvas#wave {
+      width: 100%;
+      height: 76px;
+      background: #0b0f17;
+      border-radius: 12px;
+      border: 1px solid #1e293b;
+    }
+    .status {
+      font-size: 0.88rem;
+      color: #cbd5e1;
+      text-align: center;
+      min-height: 36px;
+      line-height: 1.4;
+    }
+    .btn-row {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 10px;
+      width: 100%;
+    }
+    button {
+      width: 100%;
+      padding: 15px 12px;
+      border-radius: 12px;
+      border: none;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      color: #fff;
+    }
+    button:active { transform: scale(0.97); }
+    .btn-flash { background: #ef4444; }
+    .btn-flash.stop { background: #475569; }
+    .btn-save { background: #2563eb; }
+
+    .log-header {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+    .clear-btn {
+      width: auto;
+      padding: 7px 12px;
+      font-size: 0.8rem;
+      background: #7f1d1d;
+      color: #fecaca;
+      border-radius: 8px;
+    }
+    .log-list {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 0.88rem;
+    }
+    .log-item {
+      background: #0b0f17;
+      border: 1px solid #1e293b;
+      padding: 11px 12px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .slot-badge {
+      background: #1d4ed8;
+      color: #fff;
+      font-weight: 800;
+      font-size: 0.78rem;
+      padding: 3px 8px;
+      border-radius: 6px;
+      margin-right: 8px;
+    }
+    .log-meta { font-size: 0.75rem; color: #94a3b8; margin-top: 3px; }
+    .del-btn {
+      width: auto;
+      padding: 7px 11px;
+      background: #334155;
+      color: #f87171;
+      border-radius: 8px;
+      font-size: 0.8rem;
+    }
+    .empty-msg { text-align: center; color: #64748b; font-size: 0.84rem; padding: 10px 0; }
+  </style>
+</head>
+<body>
+
+  <h1>🔦 Android Flashlight Pulse Reader</h1>
+
+  <div class="card">
+    <div class="pulse-ring">
+      <video id="video" playsinline muted></video>
+      <div class="bpm-overlay">
+        <div class="bpm-number" id="bpmDisplay">--</div>
+        <div class="bpm-label">PUL /min</div>
+      </div>
+    </div>
+
+    <canvas id="wave" width="360" height="76"></canvas>
+
+    <div class="status" id="statusText">Tap below to turn on the white LED flash, then gently cover the flash & rear lens with your finger.</div>
+
+    <div class="btn-row">
+      <button type="button" class="btn-flash" id="flashBtn" onclick="toggleFlashlight()">💡 Turn On Flashlight</button>
+      <button type="button" class="btn-save" onclick="savePulse()">💾 Save</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="log-header">
+      <span id="recordCount">Saved Storage (0)</span>
+      <button type="button" class="clear-btn" onclick="clearAll()">Clear All</button>
+    </div>
+    <div class="log-list" id="logList"></div>
+  </div>
+
+  <canvas id="procCanvas" width="32" height="32" style="display:none;"></canvas>
+
+  <script>
+    var STORAGE_KEY = 'android_flash_pulse_v1';
+    var savedList = [];
+    var stream = null;
+    var running = false;
+    var samples = [];
+    var peaks = [];
+
+    async function toggleFlashlight() {
+      var btn = document.getElementById('flashBtn');
+      var video = document.getElementById('video');
+      var status = document.getElementById('statusText');
+
+      if (running) {
+        running = false;
+        if (stream) {
+          stream.getTracks().forEach(function (t) { t.stop(); });
+          stream = null;
+        }
+        btn.textContent = '💡 Turn On Flashlight';
+        btn.classList.remove('stop');
+        status.textContent = 'Flashlight stopped. Tap 💾 Save to keep your last reading.';
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        status.textContent = '⚠️ Open this page over HTTPS (like Vercel) in Android Chrome.';
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { exact: 'environment' },
+            width: { ideal: 320 },
+            height: { ideal: 240 }
+          },
+          audio: false
+        });
+
+        video.srcObject = stream;
+        await video.play();
+
+        var track = stream.getVideoTracks().slice(0, 1).pop();
+        await new Promise(function (r) { setTimeout(r, 350); });
+
+        var caps = track && track.getCapabilities ? track.getCapabilities() : {};
+        if (caps.torch) {
+          await track.applyConstraints({ advanced: [{ torch: true }] });
+          status.textContent = '🔦 White flash ON! Place fingertip gently over both flash & lens.';
+        } else {
+          status.textContent = '📷 Rear camera ON (torch unsupported on this lens). Use bright light.';
+        }
+
+        running = true;
+        samples = [];
+        peaks = [];
+        btn.textContent = '⏹ Stop Flashlight';
+        btn.classList.add('stop');
+        requestAnimationFrame(scanLoop);
+      } catch (err) {
+        status.textContent = '⚠️ Camera/flash permission denied or unavailable. Make sure URL is HTTPS.';
+      }
+    }
+
+    function scanLoop() {
+      if (!running) return;
+
+      var video = document.getElementById('video');
+      var procCanvas = document.getElementById('procCanvas');
+      var procCtx = procCanvas.getContext('2d', { willReadFrequently: true });
+      var waveCanvas = document.getElementById('wave');
+      var waveCtx = waveCanvas.getContext('2d');
+      var status = document.getElementById('statusText');
+
+      procCtx.drawImage(video, 0, 0, 32, 32);
+      var frame = procCtx.getImageData(0, 0, 32, 32).data;
+
+      var redSum = 0;
+      var greenSum = 0;
+      for (var i = 0; i < frame.length; i += 4) {
+        redSum += frame.at(i);
+        greenSum += frame.at(i + 1);
+      }
+      var count = frame.length / 4;
+      var avgRed = redSum / count;
+      var avgGreen = greenSum / count;
+
+      // Require bright red light from fingertip covering the illuminated lens
+      if (avgRed < 140 || avgRed < avgGreen * 1.6) {
+        status.textContent = '👆 Cover BOTH the white flash and camera lens gently with your finger.';
+        samples = [];
+        peaks = [];
+        waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+        requestAnimationFrame(scanLoop);
+        return;
+      }
+
+      var now = Date.now();
+      var prevVal = samples.length > 0 ? samples.slice(-1).pop().v : avgRed;
+      var smoothed = prevVal * 0.4 + avgRed * 0.6;
+      samples.push({ t: now, v: smoothed });
+      if (samples.length > 150) samples.shift();
+
+      // Draw live waveform
+      waveCtx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+      var vals = samples.map(function (s) { return s.v; });
+      var min = Math.min.apply(null, vals);
+      var max = Math.max.apply(null, vals);
+      var range = max - min || 1;
+
+      waveCtx.strokeStyle = '#ef4444';
+      waveCtx.lineWidth = 3;
+      waveCtx.beginPath();
+      for (var j = 0; j < samples.length; j++) {
+        var pt = samples.slice(j, j + 1).pop();
+        var x = (j / 150) * waveCanvas.width;
+        var y = waveCanvas.height - ((pt.v - min) / range) * (waveCanvas.height - 14) - 7;
+        if (j === 0) waveCtx.moveTo(x, y);
+        else waveCtx.lineTo(x, y);
+      }
+      waveCtx.stroke();
+
+      // Detect heartbeat peaks
+      if (samples.length < 25) {
+        status.textContent = '⏳ Detecting pulse wave... Hold finger still.';
+      } else {
+        var recent = vals.slice(-60);
+        var rMin = Math.min.apply(null, recent);
+        var rMax = Math.max.apply(null, recent);
+        var thresh = rMin + (rMax - rMin) * 0.6;
+        var prevSample = samples.slice(-2, -1).pop().v;
+        var currSample = samples.slice(-1).pop().v;
+
+        if (prevSample < thresh && currSample >= thresh && (rMax - rMin) > 0.35) {
+          var lastPeak = peaks.slice(-1).pop();
+          if (!lastPeak || now - lastPeak > 360) {
+peaks.push(now);
+if (peaks.length > 8) peaks.shift();
+if (peaks.length >= 2) {
+var pFirst = peaks.slice(0, 1).pop();
+var pLast = peaks.slice(-1).pop();
+var bpm = Math.round(((peaks.length - 1) / ((pLast - pFirst) / 1000)) * 60);
+if (bpm >= 40 && bpm <= 200) {
+document.getElementById('bpmDisplay').textContent = bpm;
+status.textContent = '❤️ Live Pulse: ' + bpm + ' PUL /min';
+}
+}
+}
+}
+}
+requestAnimationFrame(scanLoop);
+}
+function readStorage() {
+try {
+var raw = localStorage.getItem(STORAGE_KEY);
+if (raw) {
+savedList = JSON.parse(raw);
+return;
+}
+} catch (e) {}
+savedList = [];
+}
+function writeStorage() {
+try {
+localStorage.setItem(STORAGE_KEY, JSON.stringify(savedList));
+} catch (e) {}
+}
+function renderStorage() {
+var listBox = document.getElementById('logList');
+var countLabel = document.getElementById('recordCount');
+countLabel.textContent = 'Saved Storage (' + savedList.length + ')';
+listBox.innerHTML = '';
+if (savedList.length === 0) {
+listBox.innerHTML = 'No saved pulse readings yet.';
+return;
+}
+for (var i = 0; i < savedList.length; i++) {
+var rec = savedList.slice(i, i + 1).pop();
+var num = i + 1;
+var row = document.createElement('div');
+row.className = 'log-item';
+row.innerHTML =
+'' +
+'#' + num + 'PUL: ' + rec.bpm + ' /min' +
+'' + rec.time + '' +
+'' +
+'Delete';
+listBox.appendChild(row);
+}
+}
+function savePulse() {
+var bpm = document.getElementById('bpmDisplay').textContent;
+if (bpm === '--') {
+document.getElementById('statusText').textContent = '⚠️ Measure your pulse with the flashlight first!';
+return;
+}
+var now = new Date();
+var stamp = now.toLocaleDateString() + ' • ' + now.toLocaleTimeString();
+savedList.push({ bpm: bpm, time: stamp });
+writeStorage();
+renderStorage();
+document.getElementById('statusText').textContent = '✅ Saved #' + savedList.length + ' (' + bpm + ' PUL /min)';
+}
+function deleteOne(index) {
+savedList.splice(index, 1);
+writeStorage();
+renderStorage();
+}
+function clearAll() {
+savedList = [];
+writeStorage();
+renderStorage();
+}
+readStorage();
+renderStorage();
+
+<layout>
+disclaimer(disclaimerTypeAsInt=2, suppress=true)
+</layout>
+
+<FollowUp>
+Are you running this by saving it as an `.html` file on your desktop and opening it in Chrome/Edge, or inside an online code editor?
+</FollowUp>
