@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<title>Mobile Utility</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1020;color:#fff;min-height:100vh}
+.app{max-width:520px;margin:auto;padding:20px 16px 36px}
+h1{font-size:28px;margin:8px 0 4px}.sub{color:#aeb7cf;margin:0 0 22px}
+.card{background:#151d33;border:1px solid #293450;border-radius:22px;padding:18px;margin:14px 0;box-shadow:0 10px 30px #0003}
+.card h2{font-size:19px;margin:0 0 8px}
+button{width:100%;border:0;border-radius:16px;padding:17px;margin-top:10px;font-size:17px;font-weight:700;background:#2d6cdf;color:white}
+button:active{transform:scale(.98)}
+button.secondary{background:#28334f}
+button.danger{background:#c73545}
+.status{text-align:center;padding:12px;border-radius:12px;background:#202a45;color:#bcd0ff;margin-top:12px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:block;color:#aeb7cf;font-size:13px;margin:10px 0 5px}
+input{width:100%;padding:14px;border-radius:12px;border:1px solid #394664;background:#0e1528;color:#fff;font-size:17px}
+.result{font-size:28px;font-weight:800;text-align:center;margin:12px 0 4px}
+.note{font-size:12px;line-height:1.5;color:#9fa9c1;margin-top:12px}
+.pulse{animation:pulse 1s infinite}@keyframes pulse{50%{opacity:.55}}
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>📱 Mobile Utility</h1>
+  <p class="sub">Flashlight • Vibration • Blood Pressure</p>
+
+  <section class="card">
+    <h2>🔦 Flashlight</h2>
+    <button id="torchBtn">Turn flashlight ON</button>
+    <div id="torchStatus" class="status">Off</div>
+    <p class="note">Flashlight control requires browser/device support. On many phones, it works only after camera permission is granted and the page is served over HTTPS.</p>
+  </section>
+
+  <section class="card">
+    <h2>📳 Vibration</h2>
+    <div class="row">
+      <button onclick="vibrateOnce()">Vibrate</button>
+      <button class="secondary" onclick="vibratePattern()">Pattern</button>
+    </div>
+    <button class="danger" onclick="stopVibration()">Stop</button>
+    <div id="vibStatus" class="status">Ready</div>
+  </section>
+
+  <section class="card">
+    <h2>🩸 Blood Pressure</h2>
+    <div class="row">
+      <div><label for="sys">Systolic (mmHg)</label><input id="sys" type="number" inputmode="numeric" min="50" max="250" placeholder="120"></div>
+      <div><label for="dia">Diastolic (mmHg)</label><input id="dia" type="number" inputmode="numeric" min="30" max="150" placeholder="80"></div>
+    </div>
+    <button onclick="checkBP()">Check reading</button>
+    <div id="bpResult" class="result">—</div>
+    <div id="bpStatus" class="status">Enter a reading</div>
+    <p class="note">This page does not measure blood pressure. Enter a reading from a validated blood-pressure monitor. The category shown is only a general guide and is not a diagnosis.</p>
+  </section>
+</div>
+
+<script>
+let stream = null;
+let track = null;
+let torchOn = false;
+
+async function toggleTorch(){
+  const btn=document.getElementById('torchBtn');
+  const status=document.getElementById('torchStatus');
+
+  if(torchOn){
+    if(track) track.stop();
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    stream=null; track=null; torchOn=false;
+    btn.textContent='Turn flashlight ON';
+    status.textContent='Off';
+    return;
+  }
+
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:"environment"}}, audio:false
+    });
+    track=stream.getVideoTracks()[0];
+    const caps=track.getCapabilities ? track.getCapabilities() : {};
+    if(!caps.torch) throw new Error("Torch is not supported by this browser/device.");
+    await track.applyConstraints({advanced:[{torch:true}]});
+    torchOn=true;
+    btn.textContent='Turn flashlight OFF';
+    status.textContent='ON';
+    status.classList.add('pulse');
+  }catch(e){
+    if(stream) stream.getTracks().forEach(t=>t.stop());
+    stream=null; track=null;
+    status.classList.remove('pulse');
+    status.textContent='Unavailable: '+(e.message || 'camera/torch permission required');
+  }
+}
+
+function vibrateOnce(){
+  if(!navigator.vibrate){
+    document.getElementById('vibStatus').textContent='Vibration is not supported.';
+    return;
+  }
+  navigator.vibrate(250);
+  document.getElementById('vibStatus').textContent='Vibrating';
+}
+function vibratePattern(){
+  if(!navigator.vibrate){
+    document.getElementById('vibStatus').textContent='Vibration is not supported.';
+    return;
+  }
+  navigator.vibrate([150,100,150,100,300]);
+  document.getElementById('vibStatus').textContent='Pattern started';
+}
+function stopVibration(){
+  if(navigator.vibrate) navigator.vibrate(0);
+  document.getElementById('vibStatus').textContent='Stopped';
+}
+
+function checkBP(){
+  const s=Number(document.getElementById('sys').value);
+  const d=Number(document.getElementById('dia').value);
+  const result=document.getElementById('bpResult');
+  const status=document.getElementById('bpStatus');
+
+  if(!s || !d || s<50 || d<30){
+    result.textContent='—'; status.textContent='Enter valid numbers'; return;
+  }
+  result.textContent=s+' / '+d+' mmHg';
+
+  let category;
+  if(s>=180 || d>=120) category='Very high — seek urgent medical advice, especially with symptoms.';
+  else if(s>=140 || d>=90) category='High';
+  else if(s>=130 || d>=80) category='Elevated / high';
+  else if(s<90 || d<60) category='Low';
+  else category='Typical range';
+
+  status.textContent=category;
+}
+document.getElementById('torchBtn').addEventListener('click',toggleTorch);
+</script>
+</body>
+</html>
